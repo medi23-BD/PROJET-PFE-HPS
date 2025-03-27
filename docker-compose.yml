@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  node-backend:
+    build:
+      context: .
+    container_name: node-backend-hps
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    depends_on:
+      - flask-api
+    networks:
+      - pfe-network
+
+  flask-api:
+    build:
+      context: ./ia  # Dossier Flask
+    container_name: flask-api-hps
+    ports:
+      - "5000:5000"
+    networks:
+      - pfe-network
+
+networks:
+  pfe-network:
+    driver: bridge
