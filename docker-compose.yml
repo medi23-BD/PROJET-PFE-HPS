@@ -23,6 +23,18 @@ services:
     networks:
       - pfe-network
 
+  auto-sender:
+    build:
+      context: ./ia
+    container_name: auto-sender-hps
+    command: python pipelines/auto_sender.py
+    env_file:
+      - .env
+    depends_on:
+      - flask-api
+    networks:
+      - pfe-network
+
 networks:
   pfe-network:
     driver: bridge

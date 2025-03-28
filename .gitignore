@@ -1,0 +1,22 @@
+# Node
+node_modules/
+.env
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+
+# VSCode & Jupyter
+.vscode/
+.ipynb_checkpoints/
+
+# Docker
+*.pid
+*.sock
+*.tar
+
