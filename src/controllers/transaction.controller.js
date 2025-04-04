@@ -2,7 +2,6 @@ const db = require("../config/base-donnee");
 const { sendFraudAlert } = require("../services/email.service");
 const { predictFraud } = require("../services/flask.service");
 
-// ➕ Créer une transaction simple (ancienne méthode)
 function createTransaction(req, res) {
   const { montant, lieu, dateTransaction, typeTerminal, carte } = req.body;
   const userId = req.user ? req.user.userId : null;
@@ -25,15 +24,11 @@ function createTransaction(req, res) {
   });
 }
 
-// 🔍 Analyse IA via Flask (et sauvegarde prédiction + alerte)
 async function analyzeTransaction(req, res) {
   try {
     const transactionData = req.body;
-
-    // 🧠 Appel IA Flask
     const prediction = await predictFraud(transactionData);
 
-    // 💾 Sauvegarde dans la BDD avec scores IA
     const sql = `
       INSERT INTO transactions (
         montant, lieu, dateTransaction, typeTerminal, carte,
@@ -56,12 +51,11 @@ async function analyzeTransaction(req, res) {
     db.run(sql, values, function (err) {
       if (err) {
         return res.status(500).json({
-          message: "❌ Erreur enregistrement en base",
+          message: "Erreur enregistrement en base",
           error: err.message
         });
       }
 
-      // 📩 Envoi email si prédiction frauduleuse
       if (prediction.prediction === 1) {
         sendFraudAlert({
           montant: transactionData.transaction_amount,
@@ -74,20 +68,19 @@ async function analyzeTransaction(req, res) {
       }
 
       return res.status(201).json({
-        message: "✅ Analyse enregistrée",
+        message: "Analyse enregistrée",
         transactionId: this.lastID,
         prediction: prediction
       });
     });
   } catch (error) {
     return res.status(500).json({
-      message: "❌ Erreur d’analyse",
+      message: "Erreur d’analyse",
       error: error.response?.data || error.message,
     });
   }
 }
 
-// 🔍 Récupérer toutes les transactions
 function getAllTransactions(req, res) {
   db.all("SELECT * FROM transactions", [], (err, rows) => {
     if (err) return res.status(500).json({ message: "Erreur", error: err.message });
@@ -95,7 +88,6 @@ function getAllTransactions(req, res) {
   });
 }
 
-// 🔍 Récupérer une transaction par ID
 function getTransactionById(req, res) {
   db.get("SELECT * FROM transactions WHERE id = ?", [req.params.id], (err, row) => {
     if (err) return res.status(500).json({ message: "Erreur", error: err.message });
@@ -104,7 +96,6 @@ function getTransactionById(req, res) {
   });
 }
 
-// 🔧 Mettre à jour une transaction
 function updateTransaction(req, res) {
   const { id } = req.params;
   const { montant, lieu, dateTransaction, typeTerminal, carte } = req.body;
@@ -118,20 +109,18 @@ function updateTransaction(req, res) {
   db.run(sql, [montant, lieu, dateTransaction, typeTerminal, carte, id], function (err) {
     if (err) return res.status(500).json({ message: "Erreur", error: err.message });
     if (this.changes === 0) return res.status(404).json({ message: "Transaction non trouvée" });
-    res.status(200).json({ message: "✅ Transaction mise à jour avec succès" });
+    res.status(200).json({ message: "Transaction mise à jour avec succès" });
   });
 }
 
-// ❌ Supprimer une transaction
 function deleteTransaction(req, res) {
   db.run("DELETE FROM transactions WHERE id = ?", [req.params.id], function (err) {
     if (err) return res.status(500).json({ message: "Erreur", error: err.message });
     if (this.changes === 0) return res.status(404).json({ message: "Transaction non trouvée" });
-    res.status(200).json({ message: "✅ Transaction supprimée avec succès" });
+    res.status(200).json({ message: "Transaction supprimée avec succès" });
   });
 }
 
-// ✅ Export des fonctions
 module.exports = {
   createTransaction,
   analyzeTransaction,
