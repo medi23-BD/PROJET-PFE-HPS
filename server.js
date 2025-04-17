@@ -1,43 +1,35 @@
+// ✅ server.js corrigé
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 
-const app = express(); 
-
-const emailRoutes = require('./src/routes/email.route');
-const authRoutes = require("./src/routes/auth.routes");
-const transactionRoutes = require("./src/routes/transaction.routes");
-
+const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 🌍 Autoriser les requêtes depuis n'importe quelle origine
+// ✅ Middleware
 app.use(cors());
-
-// 📌 Autoriser le parsing du JSON
 app.use(express.json());
 
-// -----------------------------
-//    MONTAGE DES ROUTES
-// -----------------------------
+// ✅ Import des routes
+const emailRoutes = require("./src/routes/email.route");
+const smsRoutes = require("./src/routes/sms.routes");
+const authRoutes = require("./src/routes/auth.routes");
+const transactionRoutes = require("./src/routes/transaction.routes");
+const whatsappRoutes = require("./src/routes/whatsapp.routes");
 
-// ✅ Routes d'email alerte
-app.use('/api/email', emailRoutes);
-
-// ✅ Routes d'authentification
+// ✅ Enregistrement des routes
+app.use("/api/email", emailRoutes);
+app.use("/api/sms", smsRoutes);
 app.use("/api/auth", authRoutes);
-
-// ✅ Routes des transactions
 app.use("/api/transactions", transactionRoutes);
+app.use("/api/whatsapp", whatsappRoutes);
 
 // ✅ Route de test
 app.get("/", (req, res) => {
-  res.send("🚀 Projet PFE HPS – Backend en ligne !");
+  res.send("Projet PFE HPS – Backend en ligne !");
 });
 
-// -----------------------------
-//    LANCEMENT DU SERVEUR
-// -----------------------------
+// ✅ Lancement du serveur
 app.listen(PORT, () => {
-  console.log(`✅ Serveur Node.js lancé sur http://127.0.0.1:${PORT}`);
-  console.log("📡 Prêt à recevoir des requêtes !");
+  console.log(` Serveur lancé sur http://localhost:${PORT}`);
 });

@@ -1,6 +1,7 @@
 const db = require("../config/base-donnee");
 const { sendFraudAlert } = require("../services/email.service");
 const { predictFraud } = require("../services/flask.service");
+const { sendWhatsAppMessage } = require("../services/whatsapp.service");
 
 function createTransaction(req, res) {
   const { montant, lieu, dateTransaction, typeTerminal, carte } = req.body;
@@ -57,13 +58,34 @@ async function analyzeTransaction(req, res) {
       }
 
       if (prediction.prediction === 1) {
-        sendFraudAlert({
+        const payload = {
           montant: transactionData.transaction_amount,
           lieu: transactionData.merchant_city || "Inconnu",
           dateTransaction: transactionData.transaction_local_date,
           typeTerminal: transactionData.channel,
           carte: transactionData.card_number || "XXXX",
           scores: prediction
+        };
+
+        // Envoi email
+        sendFraudAlert(payload);
+
+        // Envoi WhatsApp
+        const phone = "212660025046";
+        const msg = `🚨 Alerte HPS – Transaction suspecte détectée :\n\n` +
+                    `💳 Montant : ${payload.montant} MAD\n` +
+                    `📍 Lieu : ${payload.lieu}\n📆 Date : ${payload.dateTransaction}\n` +
+                    `🖥️ Terminal : ${payload.typeTerminal}\n` +
+                    `🪪 Carte : ********${String(payload.carte).slice(-4)}\n\n` +
+                    `🤖 Scores IA :\n` +
+                    ` - XGBoost : ${prediction.probabilite_xgboost.toFixed(4)}\n` +
+                    ` - MLP : ${prediction.probabilite_mlp.toFixed(4)}\n` +
+                    ` - Autoencodeur : ${prediction.mse_autoencodeur.toFixed(6)}`;
+
+        sendWhatsAppMessage({
+          message: msg,
+          phoneNumber: phone,
+          apiKey: "7853353"
         });
       }
 
@@ -121,11 +143,22 @@ function deleteTransaction(req, res) {
   });
 }
 
+function markAsHandled(req, res) {
+  const { id } = req.params;
+  const sql = `UPDATE transactions SET status = 'TRAITÉE' WHERE id = ?`;
+
+  db.run(sql, [id], function (err) {
+    if (err) return res.status(500).json({ message: "Erreur", error: err.message });
+    res.status(200).json({ message: "Transaction marquée comme traitée" });
+  });
+}
+
 module.exports = {
   createTransaction,
   analyzeTransaction,
   getAllTransactions,
   getTransactionById,
   updateTransaction,
-  deleteTransaction
+  deleteTransaction,
+  markAsHandled
 };
