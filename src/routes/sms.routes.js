@@ -1,9 +1,9 @@
 // src/routes/sms.routes.js
 const express = require("express");
 const router = express.Router();
-const { sendSmsAlert } = require("../services/twilio.service");
+const { sendSmsAlert } = require("../services/sms.service");
 
-router.post("/api/sms/alert", async (req, res) => {
+router.post("/alert", async (req, res) => {
   const { phone, message } = req.body;
   try {
     await sendSmsAlert({ to: phone, body: message });

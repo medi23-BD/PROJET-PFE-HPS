@@ -1,4 +1,3 @@
-// src/services/twilio.service.js
 const twilio = require("twilio");
 
 const accountSid = process.env.TWILIO_SID;
@@ -9,12 +8,12 @@ async function sendSmsAlert({ to, body }) {
   try {
     const message = await client.messages.create({
       body,
-      from: "+19133991712", // Ton numéro Twilio
+      from: process.env.TWILIO_FROM, 
       to,
     });
-    console.log("✅ SMS envoyé :", message.sid);
+    console.log(" SMS envoyé :", message.sid);
   } catch (error) {
-    console.error("❌ Erreur envoi SMS :", error.message);
+    console.error(" Erreur envoi SMS :", error.message);
   }
 }
 

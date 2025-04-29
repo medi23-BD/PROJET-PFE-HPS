@@ -67,10 +67,8 @@ async function analyzeTransaction(req, res) {
           scores: prediction
         };
 
-        // Envoi email
         sendFraudAlert(payload);
 
-        // Envoi WhatsApp
         const phone = "212660025046";
         const msg = `🚨 Alerte HPS – Transaction suspecte détectée :\n\n` +
                     `💳 Montant : ${payload.montant} MAD\n` +
@@ -143,13 +141,17 @@ function deleteTransaction(req, res) {
   });
 }
 
-function markAsHandled(req, res) {
+// ✅ Nouvelle fonction CORRECTE pour mettre à jour le champ STATUT
+function updateTransactionStatus(req, res) {
   const { id } = req.params;
-  const sql = `UPDATE transactions SET status = 'TRAITÉE' WHERE id = ?`;
+  const { statut } = req.body;
 
-  db.run(sql, [id], function (err) {
-    if (err) return res.status(500).json({ message: "Erreur", error: err.message });
-    res.status(200).json({ message: "Transaction marquée comme traitée" });
+  const sql = `UPDATE transactions SET statut = ? WHERE id = ?`;
+
+  db.run(sql, [statut, id], function (err) {
+    if (err) return res.status(500).json({ message: "Erreur de mise à jour du statut", error: err.message });
+    if (this.changes === 0) return res.status(404).json({ message: "Transaction non trouvée" });
+    res.status(200).json({ message: "Statut de la transaction mis à jour avec succès" });
   });
 }
 
@@ -160,5 +162,5 @@ module.exports = {
   getTransactionById,
   updateTransaction,
   deleteTransaction,
-  markAsHandled
+  updateTransactionStatus,
 };

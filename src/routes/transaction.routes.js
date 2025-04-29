@@ -5,10 +5,9 @@ const verifyToken = require("../middleware/authJwt");
 
 router.get("/", transactionController.getAllTransactions);
 router.post("/", transactionController.createTransaction); 
-//router.get("/", verifyToken, transactionController.getAllTransactions);
-router.get("/:id", verifyToken, transactionController.getTransactionById);
+router.get("/:id", transactionController.getTransactionById); 
 router.put("/:id", verifyToken, transactionController.updateTransaction);
-router.put("/:id/handled", verifyToken, transactionController.markAsHandled);
+router.put("/:id/status", verifyToken, transactionController.updateTransactionStatus); 
 router.delete("/:id", verifyToken, transactionController.deleteTransaction);
 router.post("/predict", transactionController.analyzeTransaction);
 
