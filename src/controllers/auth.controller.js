@@ -1,26 +1,25 @@
 const db = require('../config/base-donnee');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs'); 
 const jwt = require('jsonwebtoken');
 
 
 exports.register = (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, role } = req.body;
 
-  
   if (!email || !password) {
     return res.status(400).json({ message: 'Email et mot de passe requis' });
   }
 
-  
+  const userRole = role || 'Analyste'; // 🔵 Par défaut si rien n'est envoyé
+
   const saltRounds = 10;
   bcrypt.hash(password, saltRounds, (err, hashedPassword) => {
     if (err) {
       return res.status(500).json({ message: 'Erreur lors du hachage' });
     }
 
-    
-    const sql = 'INSERT INTO users (email, password) VALUES (?, ?)';
-    db.run(sql, [email, hashedPassword], function (err) {
+    const sql = 'INSERT INTO users (email, password, role) VALUES (?, ?, ?)';
+    db.run(sql, [email, hashedPassword, userRole], function (err) {
       if (err) {
         return res.status(500).json({ message: 'Erreur lors de la création de l’utilisateur', error: err.message });
       }
@@ -30,15 +29,14 @@ exports.register = (req, res) => {
 };
 
 
+
 exports.login = (req, res) => {
   const { email, password } = req.body;
 
-  
   if (!email || !password) {
     return res.status(400).json({ message: 'Email et mot de passe requis' });
   }
 
-  
   const sql = 'SELECT * FROM users WHERE email = ?';
   db.get(sql, [email], (err, user) => {
     if (err) {
@@ -48,7 +46,6 @@ exports.login = (req, res) => {
       return res.status(401).json({ message: 'Identifiants invalides (utilisateur inconnu)' });
     }
 
-    
     bcrypt.compare(password, user.password, (err, isMatch) => {
       if (err) {
         return res.status(500).json({ message: 'Erreur lors de la comparaison des mots de passe' });
@@ -57,17 +54,22 @@ exports.login = (req, res) => {
         return res.status(401).json({ message: 'Identifiants invalides (mauvais mot de passe)' });
       }
 
-      
       const token = jwt.sign(
-        { userId: user.id, email: user.email },
+        { userId: user.id, email: user.email, role: user.role }, // ✅ On ajoute le rôle dans le JWT aussi
         process.env.JWT_SECRET,
         { expiresIn: '5h' }
       );
 
       return res.status(200).json({
         message: 'Connexion réussie',
-        token
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role, //  Important pour Angular
+        }
       });
     });
   });
 };
+
