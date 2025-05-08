@@ -21,6 +21,7 @@
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^6.10.0",
     "resend": "^4.3.0",
+    "sequelize": "^6.37.7",
     "sqlite3": "^5.1.7",
     "twilio": "^5.5.2"
   },

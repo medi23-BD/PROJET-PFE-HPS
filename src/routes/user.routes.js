@@ -12,11 +12,11 @@ const db = new sqlite3.Database(dbPath);
 router.get('/me', verifyToken, (req, res) => {
   const userId = req.userId;
 
-  db.get('SELECT id, name, email FROM users WHERE id = ?', [userId], (err, row) => {
+  db.get('SELECT id, name, email, role FROM users WHERE id = ?', [userId], (err, row) => {
     if (err) return res.status(500).json({ message: 'Erreur base de données' });
     if (!row) return res.status(404).json({ message: 'Utilisateur introuvable' });
 
-    res.json(row);
+    res.json(row); 
   });
 });
 
