@@ -1,11 +1,14 @@
 const db = require("../config/base-donnee");
 const { sendFraudAlert } = require("../services/email.service");
 const { predictFraud } = require("../services/flask.service");
-const { sendWhatsAppMessage } = require("../services/whatsapp.service");
+const { sendWhatsAppAlert: sendWhatsAppMessage } = require("../services/whatsapp.service"); // ✅ fixé ici
 
+/**
+ * Crée une nouvelle transaction basique (sans analyse AI).
+ */
 function createTransaction(req, res) {
   const { montant, lieu, dateTransaction, typeTerminal, carte } = req.body;
-  const userId = req.user ? req.user.userId : null;
+  const userId = req.user?.userId || null;
 
   const sql = `
     INSERT INTO transactions (montant, lieu, dateTransaction, typeTerminal, carte, userId)
@@ -13,10 +16,9 @@ function createTransaction(req, res) {
   `;
 
   db.run(sql, [montant, lieu, dateTransaction, typeTerminal, carte, userId], function (err) {
-    if (err) {
-      return res.status(500).json({ message: "Erreur de création", error: err.message });
-    }
+    if (err) return res.status(500).json({ message: "Erreur de création", error: err.message });
 
+    // ✅ Simple alerte par seuil
     if (montant > 3000) {
       sendFraudAlert({ montant, lieu, dateTransaction, typeTerminal, carte });
     }
@@ -25,6 +27,9 @@ function createTransaction(req, res) {
   });
 }
 
+/**
+ * Analyse une transaction via l'API Flask et enregistre le résultat.
+ */
 async function analyzeTransaction(req, res) {
   try {
     const transactionData = req.body;
@@ -43,48 +48,34 @@ async function analyzeTransaction(req, res) {
       transactionData.transaction_local_date,
       transactionData.channel,
       transactionData.card_number || "XXXX",
-      prediction.prediction,
-      prediction.mse_autoencodeur,
-      prediction.probabilite_xgboost,
-      prediction.probabilite_mlp
+      prediction.is_fraud,
+      prediction.details.autoencoder_score,
+      prediction.details.xgb_score,
+      prediction.details.mlp_score || null
     ];
 
     db.run(sql, values, function (err) {
-      if (err) {
-        return res.status(500).json({
-          message: "Erreur enregistrement en base",
-          error: err.message
-        });
-      }
+      if (err) return res.status(500).json({ message: "Erreur enregistrement", error: err.message });
 
-      if (prediction.prediction === 1) {
+      // ✅ Si fraude détectée, envoie Email + WhatsApp
+      if (prediction.is_fraud === 1) {
         const payload = {
           montant: transactionData.transaction_amount,
           lieu: transactionData.merchant_city || "Inconnu",
           dateTransaction: transactionData.transaction_local_date,
           typeTerminal: transactionData.channel,
           carte: transactionData.card_number || "XXXX",
-          scores: prediction
+          scores: {
+            probabilite_xgboost: prediction.details.xgb_score,
+            probabilite_mlp: prediction.details.mlp_score || 0,
+            mse_autoencodeur: prediction.details.autoencoder_score
+          },
+          regle_hps: prediction.details.regle_hps || null
         };
 
         sendFraudAlert(payload);
 
-        const phone = "212660025046";
-        const msg = `🚨 Alerte HPS – Transaction suspecte détectée :\n\n` +
-                    `💳 Montant : ${payload.montant} MAD\n` +
-                    `📍 Lieu : ${payload.lieu}\n📆 Date : ${payload.dateTransaction}\n` +
-                    `🖥️ Terminal : ${payload.typeTerminal}\n` +
-                    `🪪 Carte : ********${String(payload.carte).slice(-4)}\n\n` +
-                    `🤖 Scores IA :\n` +
-                    ` - XGBoost : ${prediction.probabilite_xgboost.toFixed(4)}\n` +
-                    ` - MLP : ${prediction.probabilite_mlp.toFixed(4)}\n` +
-                    ` - Autoencodeur : ${prediction.mse_autoencodeur.toFixed(6)}`;
-
-        sendWhatsAppMessage({
-          message: msg,
-          phoneNumber: phone,
-          apiKey: "7853353"
-        });
+        sendWhatsAppMessage(payload);
       }
 
       return res.status(201).json({
@@ -94,13 +85,13 @@ async function analyzeTransaction(req, res) {
       });
     });
   } catch (error) {
-    return res.status(500).json({
-      message: "Erreur d’analyse",
-      error: error.response?.data || error.message,
-    });
+    return res.status(500).json({ message: "Erreur analyse", error: error.message });
   }
 }
 
+/**
+ * CRUD Simples
+ */
 function getAllTransactions(req, res) {
   db.all("SELECT * FROM transactions", [], (err, rows) => {
     if (err) return res.status(500).json({ message: "Erreur", error: err.message });
@@ -127,31 +118,28 @@ function updateTransaction(req, res) {
   `;
 
   db.run(sql, [montant, lieu, dateTransaction, typeTerminal, carte, id], function (err) {
-    if (err) return res.status(500).json({ message: "Erreur", error: err.message });
+    if (err) return res.status(500).json({ message: "Erreur update", error: err.message });
     if (this.changes === 0) return res.status(404).json({ message: "Transaction non trouvée" });
-    res.status(200).json({ message: "Transaction mise à jour avec succès" });
+    res.status(200).json({ message: "Transaction mise à jour" });
   });
 }
 
 function deleteTransaction(req, res) {
   db.run("DELETE FROM transactions WHERE id = ?", [req.params.id], function (err) {
-    if (err) return res.status(500).json({ message: "Erreur", error: err.message });
+    if (err) return res.status(500).json({ message: "Erreur suppression", error: err.message });
     if (this.changes === 0) return res.status(404).json({ message: "Transaction non trouvée" });
-    res.status(200).json({ message: "Transaction supprimée avec succès" });
+    res.status(200).json({ message: "Transaction supprimée" });
   });
 }
 
-// ✅ Nouvelle fonction CORRECTE pour mettre à jour le champ STATUT
 function updateTransactionStatus(req, res) {
   const { id } = req.params;
   const { statut } = req.body;
 
-  const sql = `UPDATE transactions SET statut = ? WHERE id = ?`;
-
-  db.run(sql, [statut, id], function (err) {
-    if (err) return res.status(500).json({ message: "Erreur de mise à jour du statut", error: err.message });
+  db.run("UPDATE transactions SET statut = ? WHERE id = ?", [statut, id], function (err) {
+    if (err) return res.status(500).json({ message: "Erreur statut", error: err.message });
     if (this.changes === 0) return res.status(404).json({ message: "Transaction non trouvée" });
-    res.status(200).json({ message: "Statut de la transaction mis à jour avec succès" });
+    res.status(200).json({ message: "Statut mis à jour" });
   });
 }
 

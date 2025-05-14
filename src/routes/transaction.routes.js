@@ -5,7 +5,7 @@ const verifyToken = require("../middleware/authJwt");
 const { Op, fn, col, where } = require("sequelize");
 const Transaction = require("../models/Transaction");
 
-//  ✅ Route de recherche dynamique insensible à la casse
+// 🔍 Recherche dynamique insensible à la casse
 router.get("/search", async (req, res) => {
   const query = req.query.q;
   if (!query) return res.status(400).json({ message: "Requête manquante" });
@@ -14,9 +14,7 @@ router.get("/search", async (req, res) => {
     const results = await Transaction.findAll({
       where: where(
         fn("LOWER", col("lieu")),
-        {
-          [Op.like]: `%${query.toLowerCase()}%`
-        }
+        { [Op.like]: `%${query.toLowerCase()}%` }
       ),
       limit: 10,
       order: [["id", "DESC"]],
@@ -29,13 +27,15 @@ router.get("/search", async (req, res) => {
   }
 });
 
-//  ✅ Routes classiques
+// ✅ Routes principales
 router.get("/", transactionController.getAllTransactions);
 router.post("/", transactionController.createTransaction);
 router.get("/:id", transactionController.getTransactionById);
 router.put("/:id", verifyToken, transactionController.updateTransaction);
 router.put("/:id/status", verifyToken, transactionController.updateTransactionStatus);
 router.delete("/:id", verifyToken, transactionController.deleteTransaction);
-router.post("/predict", transactionController.analyzeTransaction);
+
+// ✅ Analyse IA (corrigée)
+router.post("/analyze", transactionController.analyzeTransaction);
 
 module.exports = router;

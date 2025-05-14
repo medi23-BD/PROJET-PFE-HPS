@@ -1,9 +1,0 @@
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-myenv/
-*.ipynb_checkpoints/
-*.db
-fraude.csv
-transactions.log
