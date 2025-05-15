@@ -2,40 +2,23 @@ const express = require("express");
 const router = express.Router();
 const transactionController = require("../controllers/transaction.controller");
 const verifyToken = require("../middleware/authJwt");
-const { Op, fn, col, where } = require("sequelize");
-const Transaction = require("../models/Transaction");
 
-// 🔍 Recherche dynamique insensible à la casse
-router.get("/search", async (req, res) => {
-  const query = req.query.q;
-  if (!query) return res.status(400).json({ message: "Requête manquante" });
-
-  try {
-    const results = await Transaction.findAll({
-      where: where(
-        fn("LOWER", col("lieu")),
-        { [Op.like]: `%${query.toLowerCase()}%` }
-      ),
-      limit: 10,
-      order: [["id", "DESC"]],
-    });
-
-    res.status(200).json(results);
-  } catch (error) {
-    console.error("Erreur lors de la recherche :", error);
-    res.status(500).json({ message: "Erreur serveur", error });
-  }
-});
-
-// ✅ Routes principales
+// ➤ Liste paginée des transactions (avec recherche dynamique)
 router.get("/", transactionController.getAllTransactions);
-router.post("/", transactionController.createTransaction);
-router.get("/:id", transactionController.getTransactionById);
-router.put("/:id", verifyToken, transactionController.updateTransaction);
-router.put("/:id/status", verifyToken, transactionController.updateTransactionStatus);
-router.delete("/:id", verifyToken, transactionController.deleteTransaction);
 
-// ✅ Analyse IA (corrigée)
+// ➤ Ajouter une transaction via analyse IA (route normale)
 router.post("/analyze", transactionController.analyzeTransaction);
+
+// ➤ Route COMPATIBILITÉ pour simulateur : predict redirige vers analyze
+router.post("/predict", transactionController.analyzeTransaction);
+
+// ➤ Créer manuellement une transaction (authentifié si besoin)
+router.post("/", verifyToken, transactionController.analyzeTransaction);
+
+// ➤ Récupérer les détails d'une transaction par ID
+router.get("/:id", transactionController.getTransactionById);
+
+// ➤ Supprimer une transaction (authentifié)
+router.delete("/:id", verifyToken, transactionController.deleteTransaction);
 
 module.exports = router;

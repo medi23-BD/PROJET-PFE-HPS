@@ -1,154 +1,133 @@
-const db = require("../config/base-donnee");
-const { sendFraudAlert } = require("../services/email.service");
-const { predictFraud } = require("../services/flask.service");
-const { sendWhatsAppAlert: sendWhatsAppMessage } = require("../services/whatsapp.service"); // ✅ fixé ici
+const db = require('../config/base-donnee');
+const axios = require('axios');
 
-/**
- * Crée une nouvelle transaction basique (sans analyse AI).
- */
-function createTransaction(req, res) {
-  const { montant, lieu, dateTransaction, typeTerminal, carte } = req.body;
-  const userId = req.user?.userId || null;
-
-  const sql = `
-    INSERT INTO transactions (montant, lieu, dateTransaction, typeTerminal, carte, userId)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `;
-
-  db.run(sql, [montant, lieu, dateTransaction, typeTerminal, carte, userId], function (err) {
-    if (err) return res.status(500).json({ message: "Erreur de création", error: err.message });
-
-    // ✅ Simple alerte par seuil
-    if (montant > 3000) {
-      sendFraudAlert({ montant, lieu, dateTransaction, typeTerminal, carte });
-    }
-
-    return res.status(201).json({ message: "Transaction créée", transactionId: this.lastID });
-  });
+// ➤ Criticité dynamique
+function getCriticite(hybrid_score) {
+  if (hybrid_score >= 0.65) return 'CRITIQUE';
+  if (hybrid_score >= 0.3) return 'SUSPECT';
+  return 'INFO';
 }
 
-/**
- * Analyse une transaction via l'API Flask et enregistre le résultat.
- */
-async function analyzeTransaction(req, res) {
-  try {
-    const transactionData = req.body;
-    const prediction = await predictFraud(transactionData);
+// ➤ GET All Transactions : pagination + recherche
+exports.getAllTransactions = (req, res) => {
+  const { page = 1, limit = 10, query = '' } = req.query;
+  const offset = (page - 1) * limit;
+  const search = `%${query}%`;
 
-    const sql = `
+  const sqlData = `
+    SELECT * FROM transactions
+    WHERE lieu LIKE ? OR statut LIKE ? OR merchant_name LIKE ?
+    ORDER BY dateTransaction DESC
+    LIMIT ? OFFSET ?
+  `;
+
+  const sqlCount = `
+    SELECT COUNT(*) as total FROM transactions
+    WHERE lieu LIKE ? OR statut LIKE ? OR merchant_name LIKE ?
+  `;
+
+  db.all(sqlData, [search, search, search, limit, offset], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    db.get(sqlCount, [search, search, search], (err, result) => {
+      if (err) return res.status(500).json({ error: err.message });
+
+      res.json({
+        transactions: rows,
+        total: result.total,
+        totalPages: Math.ceil(result.total / limit)
+      });
+    });
+  });
+};
+
+// ➤ POST : Analyse + Insertion
+exports.analyzeTransaction = async (req, res) => {
+  try {
+    const data = req.body; // ✅ c'est data et pas transactionData
+
+    const aiRequestBody = {
+      transaction_amount: data.montant,
+      merchant_country: 'MA',
+      card_type: 'Credit',
+      card_brand: 'Visa',
+      issuing_bank: 'Attijariwafa Bank',
+      cvv_validation: true,
+      pos_entry_mode: 'Chip',
+      channel: data.typeTerminal,
+      is_ecommerce: false,
+      is_domestic: true,
+      risk_score: parseFloat((Math.random()).toFixed(4)) // tu peux envoyer un random si t'as pas mieux
+    };
+
+    const aiResponse = await axios.post('http://localhost:5000/predict', aiRequestBody);
+
+    const { is_fraud, mse, proba_xgb, hybrid_score } = aiResponse.data;
+
+    const criticite = getCriticite(hybrid_score);
+
+    const sqlInsert = `
       INSERT INTO transactions (
-        montant, lieu, dateTransaction, typeTerminal, carte,
-        prediction, mse, proba_xgb, proba_mlp
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        montant, lieu, dateTransaction, typeTerminal, carte, userId,
+        prediction, mse, proba_xgb, hybrid_score, criticite, statut,
+        merchant_name, merchant_city
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const values = [
-      transactionData.transaction_amount,
-      transactionData.merchant_city || "Inconnu",
-      transactionData.transaction_local_date,
-      transactionData.channel,
-      transactionData.card_number || "XXXX",
-      prediction.is_fraud,
-      prediction.details.autoencoder_score,
-      prediction.details.xgb_score,
-      prediction.details.mlp_score || null
+      data.montant,
+      data.lieu,
+      data.dateTransaction,
+      data.typeTerminal,
+      data.carte,
+      data.userId || null,
+      is_fraud,
+      mse,
+      proba_xgb,
+      hybrid_score,
+      criticite,
+      'Traité',
+      data.merchant_name || 'Inconnu',
+      data.merchant_city || 'Inconnu'
     ];
 
-    db.run(sql, values, function (err) {
-      if (err) return res.status(500).json({ message: "Erreur enregistrement", error: err.message });
+    db.run(sqlInsert, values, function (err) {
+      if (err) return res.status(500).json({ error: err.message });
 
-      // ✅ Si fraude détectée, envoie Email + WhatsApp
-      if (prediction.is_fraud === 1) {
-        const payload = {
-          montant: transactionData.transaction_amount,
-          lieu: transactionData.merchant_city || "Inconnu",
-          dateTransaction: transactionData.transaction_local_date,
-          typeTerminal: transactionData.channel,
-          carte: transactionData.card_number || "XXXX",
-          scores: {
-            probabilite_xgboost: prediction.details.xgb_score,
-            probabilite_mlp: prediction.details.mlp_score || 0,
-            mse_autoencodeur: prediction.details.autoencoder_score
-          },
-          regle_hps: prediction.details.regle_hps || null
-        };
-
-        sendFraudAlert(payload);
-
-        sendWhatsAppMessage(payload);
-      }
-
-      return res.status(201).json({
-        message: "Analyse enregistrée",
-        transactionId: this.lastID,
-        prediction: prediction
+      res.json({
+        message: 'Transaction analysée et enregistrée',
+        id: this.lastID,
+        criticite,
+        hybrid_score
       });
     });
+
   } catch (error) {
-    return res.status(500).json({ message: "Erreur analyse", error: error.message });
+    console.error('Erreur analyse :', error.message);
+    res.status(500).json({ error: 'Erreur analyse IA' });
   }
-}
+};
 
-/**
- * CRUD Simples
- */
-function getAllTransactions(req, res) {
-  db.all("SELECT * FROM transactions", [], (err, rows) => {
-    if (err) return res.status(500).json({ message: "Erreur", error: err.message });
-    res.status(200).json(rows);
-  });
-}
 
-function getTransactionById(req, res) {
-  db.get("SELECT * FROM transactions WHERE id = ?", [req.params.id], (err, row) => {
-    if (err) return res.status(500).json({ message: "Erreur", error: err.message });
-    if (!row) return res.status(404).json({ message: "Transaction non trouvée" });
-    res.status(200).json(row);
-  });
-}
-
-function updateTransaction(req, res) {
+// ➤ GET By ID
+exports.getTransactionById = (req, res) => {
   const { id } = req.params;
-  const { montant, lieu, dateTransaction, typeTerminal, carte } = req.body;
 
-  const sql = `
-    UPDATE transactions
-    SET montant = ?, lieu = ?, dateTransaction = ?, typeTerminal = ?, carte = ?
-    WHERE id = ?
-  `;
+  db.get('SELECT * FROM transactions WHERE id = ?', [id], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(404).json({ error: 'Transaction non trouvée' });
 
-  db.run(sql, [montant, lieu, dateTransaction, typeTerminal, carte, id], function (err) {
-    if (err) return res.status(500).json({ message: "Erreur update", error: err.message });
-    if (this.changes === 0) return res.status(404).json({ message: "Transaction non trouvée" });
-    res.status(200).json({ message: "Transaction mise à jour" });
+    res.json(row);
   });
-}
+};
 
-function deleteTransaction(req, res) {
-  db.run("DELETE FROM transactions WHERE id = ?", [req.params.id], function (err) {
-    if (err) return res.status(500).json({ message: "Erreur suppression", error: err.message });
-    if (this.changes === 0) return res.status(404).json({ message: "Transaction non trouvée" });
-    res.status(200).json({ message: "Transaction supprimée" });
-  });
-}
-
-function updateTransactionStatus(req, res) {
+// ➤ DELETE
+exports.deleteTransaction = (req, res) => {
   const { id } = req.params;
-  const { statut } = req.body;
 
-  db.run("UPDATE transactions SET statut = ? WHERE id = ?", [statut, id], function (err) {
-    if (err) return res.status(500).json({ message: "Erreur statut", error: err.message });
-    if (this.changes === 0) return res.status(404).json({ message: "Transaction non trouvée" });
-    res.status(200).json({ message: "Statut mis à jour" });
+  db.run('DELETE FROM transactions WHERE id = ?', [id], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+
+    res.json({ message: 'Transaction supprimée', changes: this.changes });
   });
-}
-
-module.exports = {
-  createTransaction,
-  analyzeTransaction,
-  getAllTransactions,
-  getTransactionById,
-  updateTransaction,
-  deleteTransaction,
-  updateTransactionStatus,
 };

@@ -1,10 +1,9 @@
-const { Sequelize, sequelize } = require('../config/db');
+const { sequelize } = require('../config/db');
+const Transaction = require('./Transaction');
+const Notification = require('./Notification');
 
-const db = {};
-db.Sequelize = Sequelize;
-db.sequelize = sequelize;
-
-db.Transaction = require("./Transaction")(sequelize, Sequelize.DataTypes);
-db.Notification = require("./Notification")(sequelize, Sequelize.DataTypes);
-
-module.exports = db;
+module.exports = {
+  sequelize,
+  Transaction,
+  Notification,
+};

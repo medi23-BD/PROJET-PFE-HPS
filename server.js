@@ -1,8 +1,8 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const db = require("./src/config/db");
-require("./src/models");
+
+const { sequelize, Transaction, Notification } = require("./src/models"); // ✅ tu récupères tes models correctement
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,9 +14,9 @@ app.use(express.json());
 // ✅ Connexion à SQLite (Sequelize)
 (async () => {
   try {
-    await db.sequelize.authenticate();
+    await sequelize.authenticate();
     console.log("✅ SQLite connecté avec succès.");
-    await db.sequelize.sync({ alter: true });
+    await sequelize.sync({ alter: true });
     console.log("✅ Modèles Sequelize synchronisés.");
   } catch (error) {
     console.error("❌ Erreur connexion base :", error.message);
@@ -42,7 +42,7 @@ Object.entries(routes).forEach(([path, router]) => {
 
 // ✅ Route de test
 app.get("/", (req, res) => {
-  res.send(" Backend HPS opérationnel !");
+  res.send("Backend HPS opérationnel !");
 });
 
 // ✅ Lancement serveur
