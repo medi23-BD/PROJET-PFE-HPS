@@ -1,50 +1,62 @@
-const db = require('../config/base-donnee');
-const axios = require('axios');
+// ✅ VERSION SEQUELIZE DU CONTROLLER TRANSACTIONS
 
-// ➤ Criticité dynamique
+const { Transaction } = require('../models');
+const axios = require('axios');
+const businessRules = require('../services/Hps.Rules');
+const { Op } = require('sequelize');
+
 function getCriticite(hybrid_score) {
   if (hybrid_score >= 0.65) return 'CRITIQUE';
   if (hybrid_score >= 0.3) return 'SUSPECT';
   return 'INFO';
 }
 
-// ➤ GET All Transactions : pagination + recherche
-exports.getAllTransactions = (req, res) => {
-  const { page = 1, limit = 10, query = '' } = req.query;
-  const offset = (page - 1) * limit;
-  const search = `%${query}%`;
-
-  const sqlData = `
-    SELECT * FROM transactions
-    WHERE lieu LIKE ? OR statut LIKE ? OR merchant_name LIKE ?
-    ORDER BY dateTransaction DESC
-    LIMIT ? OFFSET ?
-  `;
-
-  const sqlCount = `
-    SELECT COUNT(*) as total FROM transactions
-    WHERE lieu LIKE ? OR statut LIKE ? OR merchant_name LIKE ?
-  `;
-
-  db.all(sqlData, [search, search, search, limit, offset], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-
-    db.get(sqlCount, [search, search, search], (err, result) => {
-      if (err) return res.status(500).json({ error: err.message });
-
-      res.json({
-        transactions: rows,
-        total: result.total,
-        totalPages: Math.ceil(result.total / limit)
-      });
+async function getHistoriqueTransactionsPourCarte(carte, limit = 20) {
+  try {
+    const historiques = await Transaction.findAll({
+      where: { carte },
+      order: [['dateTransaction', 'DESC']],
+      limit
     });
-  });
+    return historiques.map(t => t.toJSON());
+  } catch (err) {
+    return [];
+  }
+}
+
+const getAllTransactions = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, query = '' } = req.query;
+    const offset = (page - 1) * limit;
+
+    const whereClause = {
+      [Op.or]: [
+        { lieu: { [Op.like]: `%${query}%` } },
+        { statut: { [Op.like]: `%${query}%` } },
+        { merchant_name: { [Op.like]: `%${query}%` } }
+      ]
+    };
+
+    const { count, rows } = await Transaction.findAndCountAll({
+      where: whereClause,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      order: [['dateTransaction', 'DESC']]
+    });
+
+    res.json({
+      transactions: rows,
+      total: count,
+      totalPages: Math.ceil(count / limit)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 };
 
-// ➤ POST : Analyse + Insertion
-exports.analyzeTransaction = async (req, res) => {
+const analyzeTransaction = async (req, res) => {
   try {
-    const data = req.body; // ✅ c'est data et pas transactionData
+    const data = req.body;
 
     const aiRequestBody = {
       transaction_amount: data.montant,
@@ -53,81 +65,110 @@ exports.analyzeTransaction = async (req, res) => {
       card_brand: 'Visa',
       issuing_bank: 'Attijariwafa Bank',
       cvv_validation: true,
-      pos_entry_mode: 'Chip',
+      pos_entry_mode: data.posEntryMode || 'Chip',
       channel: data.typeTerminal,
-      is_ecommerce: false,
+      is_ecommerce: data.isEcommerce || false,
       is_domestic: true,
-      risk_score: parseFloat((Math.random()).toFixed(4)) // tu peux envoyer un random si t'as pas mieux
+      risk_score: parseFloat((Math.random()).toFixed(4))
     };
 
     const aiResponse = await axios.post('http://localhost:5000/predict', aiRequestBody);
+    const { is_fraud, hybrid_score, details } = aiResponse.data;
+    const mse = details?.autoencoder_score ?? null;
+    const proba_xgb = details?.xgb_score ?? null;
 
-    const { is_fraud, mse, proba_xgb, hybrid_score } = aiResponse.data;
+    const criticiteIA = getCriticite(hybrid_score);
+    const historique = await getHistoriqueTransactionsPourCarte(data.carte, 20);
+    const historiqueComplet = [...historique, data];
 
-    const criticite = getCriticite(hybrid_score);
+    let rulesTriggered = businessRules.applyRules(historiqueComplet);
+    if (!Array.isArray(rulesTriggered)) rulesTriggered = [];
 
-    const sqlInsert = `
-      INSERT INTO transactions (
-        montant, lieu, dateTransaction, typeTerminal, carte, userId,
-        prediction, mse, proba_xgb, hybrid_score, criticite, statut,
-        merchant_name, merchant_city
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
+    let criticiteFinale;
+    if (!rulesTriggered || rulesTriggered.length === 0) {
+      criticiteFinale = 'INFO';
+    } else if (rulesTriggered.includes('ruleAmountOver800_CRITIQUE')) {
+      criticiteFinale = 'CRITIQUE';
+    } else if (rulesTriggered.includes('ruleAmountOver800_SUSPECT')) {
+      criticiteFinale = (criticiteIA === 'CRITIQUE') ? 'CRITIQUE' : 'SUSPECT';
+    } else {
+      criticiteFinale = criticiteIA;
+    }
 
-    const values = [
-      data.montant,
-      data.lieu,
-      data.dateTransaction,
-      data.typeTerminal,
-      data.carte,
-      data.userId || null,
-      is_fraud,
+    console.log('--- DEBUG TRANSACTION ---');
+    console.log('hybrid_score:', hybrid_score, 'criticiteIA:', criticiteIA);
+    console.log('rulesTriggered:', rulesTriggered);
+    console.log('criticiteFinale:', criticiteFinale);
+    console.log('-------------------------');
+
+    const newTx = await Transaction.create({
+      montant: data.montant,
+      lieu: data.lieu,
+      dateTransaction: data.dateTransaction,
+      typeTerminal: data.typeTerminal,
+      carte: data.carte,
+      userId: data.userId || null,
+      prediction: is_fraud,
       mse,
       proba_xgb,
       hybrid_score,
-      criticite,
-      'Traité',
-      data.merchant_name || 'Inconnu',
-      data.merchant_city || 'Inconnu'
-    ];
-
-    db.run(sqlInsert, values, function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-
-      res.json({
-        message: 'Transaction analysée et enregistrée',
-        id: this.lastID,
-        criticite,
-        hybrid_score
-      });
+      criticite: criticiteFinale,
+      statut: 'Traité',
+      merchant_name: data.merchant_name || 'Inconnu',
+      merchant_city: data.merchant_city || 'Inconnu',
+      rulesTriggered: JSON.stringify(rulesTriggered)
     });
 
+    res.json({
+      message: 'Transaction analysée et enregistrée',
+      id: newTx.id,
+      criticite: criticiteFinale,
+      hybrid_score,
+      proba_xgb,
+      mse,
+      rulesTriggered
+    });
   } catch (error) {
     console.error('Erreur analyse :', error.message);
     res.status(500).json({ error: 'Erreur analyse IA' });
   }
 };
 
+const getTransactionById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const tx = await Transaction.findByPk(id);
+    if (!tx) return res.status(404).json({ error: 'Transaction non trouvée' });
 
-// ➤ GET By ID
-exports.getTransactionById = (req, res) => {
-  const { id } = req.params;
+    const data = tx.toJSON();
+    if (typeof data.rulesTriggered === 'string') {
+      try {
+        data.rulesTriggered = JSON.parse(data.rulesTriggered);
+      } catch {
+        data.rulesTriggered = [];
+      }
+    }
+    if (!data.rulesTriggered) data.rulesTriggered = [];
 
-  db.get('SELECT * FROM transactions WHERE id = ?', [id], (err, row) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!row) return res.status(404).json({ error: 'Transaction non trouvée' });
-
-    res.json(row);
-  });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 };
 
-// ➤ DELETE
-exports.deleteTransaction = (req, res) => {
-  const { id } = req.params;
+const deleteTransaction = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deleted = await Transaction.destroy({ where: { id } });
+    res.json({ message: 'Transaction supprimée', changes: deleted });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
 
-  db.run('DELETE FROM transactions WHERE id = ?', [id], function (err) {
-    if (err) return res.status(500).json({ error: err.message });
-
-    res.json({ message: 'Transaction supprimée', changes: this.changes });
-  });
+module.exports = {
+  getAllTransactions,
+  analyzeTransaction,
+  getTransactionById,
+  deleteTransaction
 };

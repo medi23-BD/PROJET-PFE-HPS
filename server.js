@@ -2,7 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 
-const { sequelize, Transaction, Notification } = require("./src/models"); // ✅ tu récupères tes models correctement
+const { sequelize } = require("./src/models");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,16 +11,21 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// ✅ Connexion à SQLite (Sequelize)
+// ✅ Connexion à SQLite via Sequelize
 (async () => {
   try {
     await sequelize.authenticate();
     console.log("✅ SQLite connecté avec succès.");
-    await sequelize.sync({ alter: true });
-    console.log("✅ Modèles Sequelize synchronisés.");
+
+    // ⛔️ Supprime ceci si tu ne veux plus de modifications automatiques
+    // await sequelize.sync({ alter: true });
+
+    // ✅ Utilise simplement sync() pour ne rien supprimer ni modifier
+    await sequelize.sync();
+    console.log("✅ Modèles Sequelize synchronisés (sans altérations).");
   } catch (error) {
     console.error("❌ Erreur connexion base :", error.message);
-    process.exit(1); // Arrêt si DB KO
+    process.exit(1);
   }
 })();
 
