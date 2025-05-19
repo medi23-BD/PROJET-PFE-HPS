@@ -1,3 +1,4 @@
+// models/transaction.js
 module.exports = (sequelize, DataTypes) => {
   const Transaction = sequelize.define('Transaction', {
     montant: DataTypes.FLOAT,
@@ -13,10 +14,12 @@ module.exports = (sequelize, DataTypes) => {
     statut: DataTypes.STRING,
     merchant_name: DataTypes.STRING,
     merchant_city: DataTypes.STRING,
-    rulesTriggered: DataTypes.TEXT
+
+    // ✅ Passage en JSON natif
+    rulesTriggered: DataTypes.JSON,
   }, {
     tableName: 'transactions',
-    timestamps: false
+    timestamps: false,
   });
 
   Transaction.associate = (models) => {

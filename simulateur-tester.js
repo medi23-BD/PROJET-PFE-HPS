@@ -326,29 +326,36 @@ async function runStressTest() {
 
   for (const test of stressTests) {
     const transactions = test.gen(userId); // fixe à 1
+
     const rulesTriggeredBatch = transactions.map((t, idx) => {
+      // Historique jusqu’à la transaction courante incluse
       const history = transactions.slice(0, idx + 1);
+
+      // Application des règles sur l’historique jusqu’à la transaction courante
       const rulesTriggered = hpsRules.applyRules(history);
+
+      // Criticité basée sur ces règles et le score IA
       let criticiteFinale = getCriticiteFinale(rulesTriggered, t.hybrid_score);
 
-      // Bloc sécurité
+      // Bloc sécurité (optionnel)
       if (criticiteFinale !== 'INFO' && (!rulesTriggered || rulesTriggered.length === 0)) {
         criticiteFinale = 'INFO';
       }
 
+      // Transaction enrichie
       const enriched = { ...t, rulesTriggered, criticiteFinale };
+
       const promise = axios.post(BASE_URL, enriched)
         .then(res => logPro(txIndex++, criticiteFinale, rulesTriggered, res.data))
         .catch(err => console.error(`❌ Transaction ${txIndex++} Error:`, err.response?.data || err.message));
       promises.push(promise);
 
-
-      return {enriched, rulesTriggered, criticiteFinale};
+      return { enriched, rulesTriggered, criticiteFinale };
     });
 
     // Log récap du batch pour analyse
     console.log(`\n--- Résumé pour ${test.name} ---`);
-    rulesTriggeredBatch.forEach(({enriched}, i) => {
+    rulesTriggeredBatch.forEach(({ enriched }, i) => {
       console.log(
         `Tx ${i + 1} | Criticité: ${enriched.criticiteFinale} | Règles: [${enriched.rulesTriggered.join(', ')}]`
       );
@@ -359,5 +366,6 @@ async function runStressTest() {
   await Promise.all(promises);
   console.log('✅ Stress-test pro terminé.');
 }
+
 
 runStressTest();

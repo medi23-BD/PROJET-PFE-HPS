@@ -1,68 +1,85 @@
-// src/services/Hps.Rules.js
-
 const riskyCountries = ['Malaisie', 'Philippines', 'Sri Lanka', 'Pérou', 'Colombie', 'Antigua et Barbade', 'Trinidade et Tobaggo', 'République Dominicaine', 'Cambodia', 'Indonésia'];
 const nonLiabilityCountries = ['Japon', 'Thailande', 'Népal'];
 const classicHighRiskCountries = ['Chine', 'Inde', 'USA'];
 const blacklistedMerchants = ['BadShop', 'FraudElectro', 'FakeStore'];
 const highRiskMCC = [6011, 7995, 4829, 6211];
 
-function getHour(d) { return new Date(d).getHours(); }
-function timeDiffMin(a, b) { return Math.abs(new Date(a) - new Date(b)) / 60000; }
+// 🔒 Sécurisation de la lecture de l'heure
+function getHour(d) {
+  try {
+    return new Date(d).getHours();
+  } catch (e) {
+    return -1;
+  }
+}
 
-// --- Règles standards et avancées --- //
+function timeDiffMin(a, b) {
+  return Math.abs(new Date(a) - new Date(b)) / 60000;
+}
+
 const rules = {
   ruleAmountOver800_SUSPECT(transactions) {
     return transactions.some(t => t.montant > 800 && t.montant < 3000);
   },
+
   ruleAmountOver800_CRITIQUE(transactions) {
-    // Critique si >3000 MAD, ou >800 + pays à risque, ou >800 + e-commerce la nuit
     return transactions.some(t =>
       t.montant >= 3000
       || (t.montant > 800 && riskyCountries.includes(t.lieu))
       || (t.montant > 800 && t.isEcommerce && (getHour(t.dateTransaction) < 7 || getHour(t.dateTransaction) >= 18))
     );
   },
+
   ruleRiskyCountry(transactions) {
     return transactions.filter(t => riskyCountries.includes(t.lieu)).length >= 3;
   },
+
   ruleNonLiabilityCountry(transactions) {
     return transactions.filter(t => nonLiabilityCountries.includes(t.lieu)).length >= 2;
   },
+
   ruleClassicInChinaIndiaUSAATM(transactions) {
     return transactions.filter(t => classicHighRiskCountries.includes(t.lieu) && t.typeTerminal === 'ATM').length >= 2;
   },
+
   rulePisteOver7TPE(transactions) {
     return transactions.filter(t => t.posEntryMode === 'Piste' && t.typeTerminal === 'POS').length > 7;
   },
+
   ruleFallbackEMV(transactions) {
     return transactions.filter(t => t.posEntryMode === 'Piste' && t.typeTerminal === 'EMV').length >= 2;
   },
+
   ruleNightEcommerce(transactions) {
     return transactions.filter(t => t.isEcommerce && (getHour(t.dateTransaction) >= 18 || getHour(t.dateTransaction) < 7)).length >= 3;
   },
+
   ruleDayEcommerce(transactions) {
     return transactions.filter(t => t.isEcommerce && getHour(t.dateTransaction) >= 7 && getHour(t.dateTransaction) < 18).length >= 5;
   },
+
   ruleEcommerceOverX(transactions, limit = 10) {
     return transactions.filter(t => t.isEcommerce).length > limit;
   },
+
   ruleEcommerceAmountOver448k(transactions) {
     const total = transactions.filter(t => t.isEcommerce).reduce((sum, t) => sum + t.montant, 0);
     return total > 448000;
   },
+
   ruleInvalidCardBIN(transactions) {
     return transactions.filter(t => t.rejetMotif === 'Invalid Card').length > 6;
   },
+
   ruleHighRiskMCC(transactions) {
     return transactions.filter(t => highRiskMCC.includes(t.merchant_category_code)).length >= 3;
   },
+
   ruleBlacklistedMerchant(transactions) {
     return transactions.some(t => blacklistedMerchants.includes(t.merchant_name));
   },
 
-  // --- Patterns avancés --- //
   ruleImpossibleTravel(transactions) {
-    // 2 lieux différents à moins d'1h = impossible
     for (let i = 1; i < transactions.length; i++) {
       const prev = transactions[i - 1];
       const curr = transactions[i];
@@ -72,8 +89,8 @@ const rules = {
     }
     return false;
   },
+
   ruleSplittedAmount(transactions) {
-    // 3 tx 700-800 en < 1h
     const slice = transactions.filter(t => t.montant >= 700 && t.montant < 800);
     if (slice.length < 3) return false;
     slice.sort((a, b) => new Date(a.dateTransaction) - new Date(b.dateTransaction));
@@ -82,13 +99,13 @@ const rules = {
     }
     return false;
   },
+
   ruleMerchantBehaviorChange(transactions) {
-    // Changement brutal de pattern (ex : e-commerce soudain)
     const last5 = transactions.slice(-5);
     return last5.filter(t => t.isEcommerce).length >= 4 && transactions.filter(t => t.isEcommerce).length < 10;
   },
+
   ruleMultiCardSameTPE(transactions) {
-    // Plusieurs cartes sur même TPE (si info dispo)
     const tpes = {};
     transactions.forEach(t => {
       if (!tpes[t.terminal_id]) tpes[t.terminal_id] = new Set();
@@ -96,11 +113,16 @@ const rules = {
     });
     return Object.values(tpes).some(set => set.size >= 3);
   },
+
   ruleCardOnMultiTPE(transactions) {
-    // Carte utilisée sur plusieurs TPEs différents à la même heure
     const grouped = {};
     transactions.forEach(t => {
-      const key = `${t.carte}_${t.dateTransaction.substr(0, 13)}`; // heure près
+      const dateKey = (typeof t.dateTransaction === 'string'
+        ? t.dateTransaction
+        : new Date(t.dateTransaction).toISOString()
+      ).substr(0, 13);
+
+      const key = `${t.carte}_${dateKey}`;
       if (!grouped[key]) grouped[key] = new Set();
       grouped[key].add(t.terminal_id);
     });
@@ -136,7 +158,6 @@ function applyRules(transactions) {
 // --- Criticité finale hybride --- //
 function getCriticiteFromRules(transactions) {
   const rulesResult = applyRules(transactions);
-  // Critique : au moins une de ces règles déclenchée
   const CRITIQUE = [
     'ruleAmountOver800_CRITIQUE',
     'ruleRiskyCountry',
@@ -148,7 +169,6 @@ function getCriticiteFromRules(transactions) {
   ];
   if (rulesResult.some(rule => CRITIQUE.includes(rule))) return 'CRITIQUE';
 
-  // Suspect : au moins une de ces règles, sinon
   const SUSPECT = [
     'ruleAmountOver800_SUSPECT',
     'ruleDayEcommerce',
@@ -165,7 +185,6 @@ function getCriticiteFromRules(transactions) {
   ];
   if (rulesResult.some(rule => SUSPECT.includes(rule))) return 'SUSPECT';
 
-  // Par défaut
   return 'INFO';
 }
 
