@@ -6,6 +6,9 @@ const verifyToken = require("../middleware/authJwt");
 // ➤ Liste paginée des transactions (avec recherche dynamique)
 router.get("/", transactionController.getAllTransactions);
 
+// route spécifique aux alertes
+router.get('/alertes', transactionController.getAlertes);
+
 // ➤ Ajouter une transaction via analyse IA (route normale)
 router.post("/analyze", transactionController.analyzeTransaction);
 
