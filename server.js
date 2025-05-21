@@ -38,7 +38,9 @@ const routes = {
   "/api/whatsapp": require("./src/routes/whatsapp.routes"),
   "/api/users": require("./src/routes/user.routes"),
   "/api/notifications": require("./src/routes/notification.routes"),
+  "/api/config": require("./src/routes/config.routes"),
 };
+
 
 // ✅ Enregistrement dynamique des routes
 Object.entries(routes).forEach(([path, router]) => {
@@ -54,3 +56,5 @@ app.get("/", (req, res) => {
 app.listen(PORT, () => {
   console.log(`✅ Serveur lancé : http://localhost:${PORT}`);
 });
+
+
