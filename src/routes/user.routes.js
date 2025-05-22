@@ -1,23 +1,23 @@
 const express = require('express');
 const router = express.Router();
 const verifyToken = require('../middleware/authJwt');
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const { User } = require('../models');
 
-// Connexion à la base SQLite
-const dbPath = path.resolve(__dirname, '../database/projet.db');
-const db = new sqlite3.Database(dbPath);
+// ✅ Route pour récupérer le profil utilisateur connecté
+router.get('/me', verifyToken, async (req, res) => {
+  try {
+    const userId = req.userId;
 
-//  GET /api/users/me
-router.get('/me', verifyToken, (req, res) => {
-  const userId = req.userId;
+    const user = await User.findByPk(userId, {
+      attributes: ['id', 'email', 'role', 'fullName', 'avatar', 'createdAt', 'lastLogin']
+    });
 
-  db.get('SELECT id, name, email, role FROM users WHERE id = ?', [userId], (err, row) => {
-    if (err) return res.status(500).json({ message: 'Erreur base de données' });
-    if (!row) return res.status(404).json({ message: 'Utilisateur introuvable' });
+    if (!user) return res.status(404).json({ message: 'Utilisateur introuvable' });
 
-    res.json(row); 
-  });
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur serveur', error: err.message });
+  }
 });
 
 module.exports = router;

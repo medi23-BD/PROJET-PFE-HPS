@@ -8,6 +8,25 @@ module.exports = (sequelize, DataTypes) => {
     password: {
       type: DataTypes.STRING,
       allowNull: false
+    },
+    role: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'Analyste'
+    },
+    fullName: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: 'Utilisateur'
+    },
+    avatar: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: 'assets/images/avatar-default.png'
+    },
+    lastLogin: {
+      type: DataTypes.DATE,
+      allowNull: true
     }
   });
 

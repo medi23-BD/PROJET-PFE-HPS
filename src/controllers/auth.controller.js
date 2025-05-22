@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 // ✅ Enregistrement utilisateur
 exports.register = async (req, res) => {
   try {
-    const { email, password, role } = req.body;
+    const { email, password, role, fullName, avatar } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ message: 'Email et mot de passe requis' });
@@ -21,7 +21,9 @@ exports.register = async (req, res) => {
     const newUser = await User.create({
       email,
       password: hashedPassword,
-      role: role || 'Analyste'
+      role: role || 'Analyste',
+      fullName: fullName || 'Utilisateur',
+      avatar: avatar || 'assets/images/avatar-default.png'
     });
 
     return res.status(201).json({
@@ -29,7 +31,10 @@ exports.register = async (req, res) => {
       userId: newUser.id
     });
   } catch (err) {
-    return res.status(500).json({ message: 'Erreur lors de la création de l’utilisateur', error: err.message });
+    return res.status(500).json({
+      message: 'Erreur lors de la création de l’utilisateur',
+      error: err.message
+    });
   }
 };
 
@@ -52,6 +57,10 @@ exports.login = async (req, res) => {
       return res.status(401).json({ message: 'Identifiants invalides (mauvais mot de passe)' });
     }
 
+    // ✅ Met à jour la date de dernière connexion
+    user.lastLogin = new Date();
+    await user.save();
+
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET,
@@ -65,9 +74,15 @@ exports.login = async (req, res) => {
         id: user.id,
         email: user.email,
         role: user.role,
+        fullName: user.fullName,
+        avatar: user.avatar,
+        lastLogin: user.lastLogin
       }
     });
   } catch (err) {
-    return res.status(500).json({ message: 'Erreur lors de la connexion', error: err.message });
+    return res.status(500).json({
+      message: 'Erreur lors de la connexion',
+      error: err.message
+    });
   }
 };
