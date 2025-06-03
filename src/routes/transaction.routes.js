@@ -6,22 +6,31 @@ const verifyToken = require("../middleware/authJwt");
 // ➤ Liste paginée des transactions (avec recherche dynamique)
 router.get("/", transactionController.getAllTransactions);
 
-// route spécifique aux alertes
-router.get('/alertes', transactionController.getAlertes);
+// ✅ Stats globales
+router.get('/stats-globales', transactionController.getStatsGlobales);
 
-// ➤ Ajouter une transaction via analyse IA (route normale)
+// ✅ Stats histogramme par criticité
+router.get('/stats/criticite', transactionController.getStatsParCriticite);
+
+// ✅ Alertes
+router.get('/alertes', transactionController.getAlertes);
+router.get('/alertes-critiques', transactionController.getDernieresAlertesCritiques);
+router.get('/alertes-par-type', transactionController.getAlertesParType);
+router.get('/alertes-par-criticite', transactionController.getAlertesParCriticite);
+
+// ➤ Analyse IA
 router.post("/analyze", transactionController.analyzeTransaction);
 
-// ➤ Route COMPATIBILITÉ pour simulateur : predict redirige vers analyze
+// ➤ Compatibilité simulateur
 router.post("/predict", transactionController.analyzeTransaction);
 
-// ➤ Créer manuellement une transaction (authentifié si besoin)
+// ➤ Créer manuellement une transaction (authentifié)
 router.post("/", verifyToken, transactionController.analyzeTransaction);
 
-// ➤ Récupérer les détails d'une transaction par ID
+// ➤ Détails transaction
 router.get("/:id", transactionController.getTransactionById);
 
-// ➤ Supprimer une transaction (authentifié)
+// ➤ Suppression
 router.delete("/:id", verifyToken, transactionController.deleteTransaction);
 
 module.exports = router;
