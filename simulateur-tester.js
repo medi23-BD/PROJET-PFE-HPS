@@ -1,8 +1,48 @@
-
 const axios = require('axios');
 const hpsRules = require('./src/services/Hps.Rules'); // adapte ce chemin si besoin
 
 const BASE_URL = 'http://localhost:3000/api/transactions/analyze';
+
+// Cache pour les coordonnées géographiques
+const geoCache = {};
+
+async function getCoordinates(city) {
+  // Vérifie d'abord le cache
+  if (geoCache[city]) {
+    return geoCache[city];
+  }
+
+  try {
+    const response = await axios.get('https://nominatim.openstreetmap.org/search', {
+      params: {
+        q: city,
+        format: 'json',
+        limit: 1
+      },
+      headers: {
+        'User-Agent': 'fraud-simulator' // requis par Nominatim
+      }
+    });
+
+    if (response.data.length > 0) {
+      const { lat, lon } = response.data[0];
+      const coords = {
+        lat: parseFloat(lat),
+        lon: parseFloat(lon)
+      };
+      
+      // Mise en cache
+      geoCache[city] = coords;
+      return coords;
+    } else {
+      console.warn(`❌ Ville non trouvée : ${city}`);
+      return null;
+    }
+  } catch (error) {
+    console.error(`❌ Erreur API geo pour ${city} :`, error.message);
+    return null;
+  }
+}
 
 // --- Utils réalistes --- //
 const merchants = [
@@ -325,13 +365,13 @@ async function runStressTest() {
   let userId = 1;
 
   for (const test of stressTests) {
-    const transactions = test.gen(userId); // fixe à 1
+    const transactions = test.gen(userId);
 
-    const rulesTriggeredBatch = transactions.map((t, idx) => {
-      // Historique jusqu’à la transaction courante incluse
+    for (const [idx, t] of transactions.entries()) {
+      // Historique jusqu'à la transaction courante incluse
       const history = transactions.slice(0, idx + 1);
 
-      // Application des règles sur l’historique jusqu’à la transaction courante
+      // Application des règles sur l'historique
       const rulesTriggered = hpsRules.applyRules(history);
 
       // Criticité basée sur ces règles et le score IA
@@ -342,30 +382,39 @@ async function runStressTest() {
         criticiteFinale = 'INFO';
       }
 
+      // Récupération des coordonnées GPS
+      const city = t.merchant_city;
+      const coords = await getCoordinates(city);
+
       // Transaction enrichie
-      const enriched = { ...t, rulesTriggered, criticiteFinale };
+      const enriched = {
+        ...t,
+        rulesTriggered,
+        criticiteFinale,
+        latitude: coords?.lat || null,
+        longitude: coords?.lon || null
+      };
 
       const promise = axios.post(BASE_URL, enriched)
         .then(res => logPro(txIndex++, criticiteFinale, rulesTriggered, res.data))
         .catch(err => console.error(`❌ Transaction ${txIndex++} Error:`, err.response?.data || err.message));
-      promises.push(promise);
 
-      return { enriched, rulesTriggered, criticiteFinale };
-    });
+      promises.push(promise);
+    }
 
     // Log récap du batch pour analyse
     console.log(`\n--- Résumé pour ${test.name} ---`);
-    rulesTriggeredBatch.forEach(({ enriched }, i) => {
+    for (const [i, t] of transactions.entries()) {
+      const coords = geoCache[t.merchant_city] || {};
       console.log(
-        `Tx ${i + 1} | Criticité: ${enriched.criticiteFinale} | Règles: [${enriched.rulesTriggered.join(', ')}]`
+        `Tx ${i + 1} | Criticité: ${t.criticiteFinale} | Règles: [${t.rulesTriggered?.join(', ') || 'Aucune'}] | Ville: ${t.merchant_city} (${coords.lat}, ${coords.lon})`
       );
-    });
+    }
     console.log('-----------------------------\n');
   }
 
   await Promise.all(promises);
   console.log('✅ Stress-test pro terminé.');
 }
-
 
 runStressTest();

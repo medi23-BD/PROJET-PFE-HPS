@@ -39,6 +39,8 @@ const routes = {
   "/api/users": require("./src/routes/user.routes"),
   "/api/notifications": require("./src/routes/notification.routes"),
   "/api/config": require("./src/routes/config.routes"),
+  "/api/user-activity": require("./src/routes/user-activity.routes"),
+
 };
 
 

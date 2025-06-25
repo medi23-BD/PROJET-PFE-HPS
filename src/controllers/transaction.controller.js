@@ -71,8 +71,11 @@ const analyzeTransaction = async (req, res) => {
       statut: 'Traité',
       merchant_name: data.merchant_name || 'Inconnu',
       merchant_city: data.merchant_city || 'Inconnu',
+      latitude: data.latitude ?? null,              
+      longitude: data.longitude ?? null,            
       rulesTriggered: data.rulesTriggered || []
     });
+
 
     res.json({
       message: 'Transaction analysée et enregistrée',
@@ -268,6 +271,27 @@ const getIaPerformanceData = async (req, res) => {
   }
 };
 
+// ✅ Transactions géolocalisées (fraude)
+const getTransactionsGeolocalisees = async (req, res) => {
+  try {
+    const transactions = await Transaction.findAll({
+      where: {
+        criticite: { [Op.in]: ['CRITIQUE', 'SUSPECT'] },
+        latitude: { [Op.ne]: null },
+        longitude: { [Op.ne]: null }
+      },
+      order: [['dateTransaction', 'DESC']],
+      limit: 100 // ou + selon besoin
+    });
+
+    res.json(transactions);
+  } catch (err) {
+    console.error('Erreur geolocalisees :', err.message);
+    res.status(500).json({ error: 'Erreur chargement des transactions géolocalisées' });
+  }
+};
+
+
 module.exports = {
   getAllTransactions,
   analyzeTransaction,
@@ -279,5 +303,6 @@ module.exports = {
   getStatsParCriticite,
   getStatsGlobales,
   getAlertes,
+  getTransactionsGeolocalisees,
   getIaPerformanceData 
 };

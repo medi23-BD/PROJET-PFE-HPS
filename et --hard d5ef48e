@@ -1,0 +1,21 @@
+[33m0908f93[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Valide localisation
+[33md5ef48e[m  Node js ok avec ia Performance dynamique
+[33madca360[m top pour node js
+[33m3e3b952[m  c est bon back node jeudi
+[33m8895e6c[m  done back page config
+[33m950533f[m on valide le backend pour Mardi
+[33m14d0d71[m[33m ([m[1;31morigin/main[m[33m)[m  on valide le simulateur
+[33m1dc9009[m  on valide bd dimanche
+[33m0254d2f[m ✅ Fix: Simulation PRO V6 fonctionnelle | Transactions + criticité OK | Bug SQLite résolu
+[33m04a3091[m Clean tracking unwanted files (venv, Lib, etc)
+[33m8c1ffda[m Fix .gitignore clean workspace
+[33mbc71d1b[m valide aujourdhui
+[33m5f72b52[m  Notification a marche
+[33madb5ed7[m  on valide nodejs
+[33mb054090[m  top pour le back end lie avec pages alertes front
+[33m185aa53[m 🔐 Exclu fichier .env contenant secrets
+[33m2b12fe0[m 🔒 Clean: utilisation de variables d’environnement pour Twilio
+[33m93fb833[m  Finalisation auto_sender et service email (en cours) – à terminer Vendredi 10/04/2025
+[33mcacf06b[m  Intégration complète de l’IA avec le backend – analyse Flask + alerte email via Resend
+[33ma4c6df0[m 🚀 Ajout et mise à jour des fichiers Docker, .gitignore et auto_sender.py
+[33m8acb3ca[m[33m ([m[1;32mold_version[m[33m)[m Initialisation du projet PFE HPS avec tous les fichiers

@@ -17,6 +17,16 @@ module.exports = (sequelize, DataTypes) => {
 
     // ✅ Passage en JSON natif
     rulesTriggered: DataTypes.JSON,
+
+    // ✅ Champs latitude / longitude ajoutés
+    latitude: {
+      type: DataTypes.REAL,
+      allowNull: true,
+    },
+    longitude: {
+      type: DataTypes.REAL,
+      allowNull: true,
+    }
   }, {
     tableName: 'transactions',
     timestamps: false,

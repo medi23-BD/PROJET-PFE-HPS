@@ -16,6 +16,8 @@ router.get("/alertes-critiques", transactionController.getDernieresAlertesCritiq
 router.get("/alertes-par-type", transactionController.getAlertesParType);
 router.get("/alertes-par-criticite", transactionController.getAlertesParCriticite);
 router.get("/ia-performance/full", transactionController.getIaPerformanceData);
+router.get("/des-geolocalisees", transactionController.getTransactionsGeolocalisees);
+
 
 // ➤ Liste paginée & ID 
 router.get("/", transactionController.getAllTransactions);
